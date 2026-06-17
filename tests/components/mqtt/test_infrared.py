@@ -4,6 +4,8 @@ import logging
 from typing import Any
 
 from freezegun.api import FrozenDateTimeFactory
+from infrared_protocols.codes.samsung.tv import SamsungTVCode
+from infrared_protocols.commands import Command
 from infrared_protocols.commands.nec import NECCommand
 import orjson
 import pytest
@@ -57,19 +59,22 @@ DEFAULT_CONFIG_RECEIVER = {
     }
 }
 
-TEST_COMMAND = NECCommand(address=0x04FB, command=0x08F7, modulation=38000)
+TEST_COMMAND1 = NECCommand(address=0x04FB, command=0x08F7, modulation=38000)
+TEST_COMMAND2 = SamsungTVCode.POWER.to_command(0)
 
 
 @pytest.mark.parametrize("hass_config", [DEFAULT_CONFIG_RECEIVER])
+@pytest.mark.parametrize("command", [TEST_COMMAND1, TEST_COMMAND2])
 async def test_receiving_command_success(
     hass: HomeAssistant,
     mqtt_mock_entry: MqttMockHAClientGenerator,
     freezer: FrozenDateTimeFactory,
+    command: Command,
 ) -> None:
     """Test receiving an infrared command via subscription is successful."""
     payload_data = {
-        "timings": TEST_COMMAND.get_raw_timings(),
-        "modulation": TEST_COMMAND.modulation,
+        "timings": command.get_raw_timings(),
+        "modulation": command.modulation,
     }
     payload = orjson.dumps(payload_data).decode()
 
@@ -92,8 +97,8 @@ async def test_receiving_command_success(
 
     assert len(received_signals) == 1
     signal = received_signals[0]
-    assert signal.modulation == TEST_COMMAND.modulation
-    assert signal.timings == TEST_COMMAND.get_raw_timings()
+    assert signal.modulation == command.modulation
+    assert signal.timings == command.get_raw_timings()
 
     state = hass.states.get("infrared.test")
     assert state is not None
@@ -174,10 +179,12 @@ async def test_receiving_command_unsuccessful(
 
 
 @pytest.mark.parametrize("hass_config", [DEFAULT_CONFIG_EMITTER])
+@pytest.mark.parametrize("command", [TEST_COMMAND1, TEST_COMMAND2])
 async def test_async_send_command_success(
     hass: HomeAssistant,
     mqtt_mock_entry: MqttMockHAClientGenerator,
     freezer: FrozenDateTimeFactory,
+    command: Command,
 ) -> None:
     """Test sending command via async_send_command helper."""
     now = dt_util.utcnow()
@@ -186,13 +193,13 @@ async def test_async_send_command_success(
     mqtt_mock = await mqtt_mock_entry()
 
     expected_payload_data = {
-        "timings": TEST_COMMAND.get_raw_timings(),
-        "modulation": TEST_COMMAND.modulation,
-        "repeat_count": TEST_COMMAND.repeat_count,
+        "timings": command.get_raw_timings(),
+        "modulation": command.modulation,
+        "repeat_count": command.repeat_count,
     }
     expected_payload = orjson.dumps(expected_payload_data).decode()
 
-    await infrared.async_send_command(hass, "infrared.test", TEST_COMMAND)
+    await infrared.async_send_command(hass, "infrared.test", command)
 
     mqtt_mock.async_publish.assert_called_with(
         "test-topic", expected_payload, 0, False, message_expiry_interval=None
