@@ -104,8 +104,10 @@ Every check has a code following the
 | `W7420` | [`home-assistant-tests-direct-platform-async-setup-entry`](#w7420-home-assistant-tests-direct-platform-async-setup-entry) | Tests should not call a platform's `async_setup_entry` directly |
 | `W7421` | [`home-assistant-tests-direct-async-migrate-entry`](#w7421-home-assistant-tests-direct-async-migrate-entry) | Tests should not call an integration's `async_migrate_entry` directly |
 | `W7422` | [`home-assistant-tests-direct-async-setup`](#w7422-home-assistant-tests-direct-async-setup) | Tests should not call an integration's `async_setup` directly |
+| `W7426` | [`home-assistant-tests-direct-async-unload-entry`](#w7426-home-assistant-tests-direct-async-unload-entry) | Tests should not call an integration's `async_unload_entry` directly |
 | `C7414` | [`home-assistant-enforce-utcnow`](#c7414-home-assistant-enforce-utcnow) | Use `homeassistant.util.dt.utcnow` instead of `datetime.now(UTC)` |
 | `C7425` | [`home-assistant-enforce-now`](#c7425-home-assistant-enforce-now) | Use `homeassistant.util.dt.now` instead of `datetime.now(<tz>)` |
+| `C7427` | [`home-assistant-enforce-naive-now`](#c7427-home-assistant-enforce-naive-now) | Use `homeassistant.util.dt.naive_now` instead of `datetime.now()` |
 | `W7423` | [`home-assistant-missing-entity-unique-id`](#w7423-home-assistant-missing-entity-unique-id) | Entity class does not statically guarantee a non-None unique id |
 | `W7424` | [`home-assistant-entity-unique-id-static`](#w7424-home-assistant-entity-unique-id-static) | Entity class sets `_attr_unique_id` to a static string at class level |
 | `C7412` | [`home-assistant-entity-description-redundant-default`](#c7412-home-assistant-entity-description-redundant-default) | Setting an EntityDescription field to its default value is redundant |
@@ -447,6 +449,19 @@ the setup through the normal pipeline:
 See [epic #79](https://github.com/home-assistant/epics/issues/79).
 
 
+## `home_assistant_tests_direct_async_unload_entry` checker
+
+Detects tests that call an integration's `async_unload_entry` directly.
+
+### `W7426`: `home-assistant-tests-direct-async-unload-entry`
+
+Tests should not invoke an integration's `async_unload_entry` from
+`__init__.py` directly. Instead, tests should let Home Assistant trigger
+the unload via `await hass.config_entries.async_unload(entry.entry_id)` so
+that the real unload flow (platform unloading, listener teardown,
+`runtime_data` cleanup, etc.) is exercised.
+
+
 ## `home_assistant_enforce_utcnow` checker
 
 Ensures the Home Assistant helper is used to get the current UTC time.
@@ -472,8 +487,27 @@ helper returns an aware `datetime` in the given time zone (defaulting to
 `DEFAULT_TIME_ZONE`), keeping the codebase consistent in how the current
 local time is obtained. The UTC case (`datetime.now(UTC)`) is handled by
 the [`home-assistant-enforce-utcnow`](#c7414-home-assistant-enforce-utcnow)
-checker, and `datetime.now()` with no argument is not flagged since it
-returns a naive local `datetime`.
+checker, and `datetime.now()` with no argument is handled by the
+[`home-assistant-enforce-naive-now`](#c7427-home-assistant-enforce-naive-now)
+checker.
+
+
+## `home_assistant_enforce_naive_now` checker
+
+Ensures the Home Assistant helper is used to get the current naive local time.
+
+### `C7427`: `home-assistant-enforce-naive-now`
+
+Use `homeassistant.util.dt.naive_now()` instead of `datetime.datetime.now()`
+called without a time zone argument. The helper returns a naive `datetime` in
+system local time, keeping the codebase consistent in how the current naive
+local time is obtained and documenting that a naive `datetime` is intentional.
+An explicit `None` argument (`datetime.now(None)` or `datetime.now(tz=None)`)
+returns a naive `datetime` too and is flagged. The aware cases
+(`datetime.now(<tz>)` and `datetime.now(UTC)`) are handled by the
+[`home-assistant-enforce-now`](#c7425-home-assistant-enforce-now) and
+[`home-assistant-enforce-utcnow`](#c7414-home-assistant-enforce-utcnow)
+checkers.
 
 
 ## `home_assistant_entity_unique_id` checker
